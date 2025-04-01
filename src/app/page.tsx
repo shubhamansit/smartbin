@@ -10,14 +10,30 @@ interface JWTPayload {
 const page = async () => {
   const token = (await cookies()).get("token")?.value;
   if (token) {
-    const decoded = jwt.verify(token, "$UPERMAN") as JWTPayload;
-    const user = await prisma.user.findFirst({
-      where: {
-        id: decoded.id,
-      },
-    });
-    if (user) {
-      return <DashboardPage role={user?.role} />;
+    var decoded;
+    try {
+      decoded = jwt.verify(token, "$UPERMAN") as JWTPayload;
+      const user = await prisma.user.findFirst({
+        where: {
+          id: decoded.id,
+        },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+      });
+      if (user) {
+        return (
+          <DashboardPage
+            role={user?.role}
+            userId={user.id}
+            accountName={user.name}
+          />
+        );
+      }
+    } catch (error) {
+      redirect("/login");
     }
   } else {
     redirect("/login");

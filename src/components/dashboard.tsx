@@ -85,12 +85,14 @@ import {
   addBinAction,
   binUpdateAction,
   deleteBinAction,
+  getAllBinOwners,
   getAllBins,
 } from "@/lib/actions";
 import { toast } from "sonner";
 
 // Form validation schema
 const binFormSchema = z.object({
+  binOwner: z.string(),
   sensorId: z.string().min(2, {
     message: "Sensor ID must be at least 2 characters.",
   }),
@@ -111,7 +113,15 @@ const binFormSchema = z.object({
   }),
 });
 
-export default function DashboardPage({ role }: { role: string }) {
+export default function DashboardPage({
+  role,
+  userId,
+  accountName,
+}: {
+  role: string;
+  userId: string;
+  accountName: string;
+}) {
   const [wasteData, setWasteData] = useState<
     | {
         id: string;
@@ -120,13 +130,17 @@ export default function DashboardPage({ role }: { role: string }) {
         site: string;
         category: string;
         lastReported: string;
+        binOwner: {
+          id: string;
+          name: string;
+        };
       }[]
     | null
   >(null);
 
   useEffect(() => {
     async function getBins() {
-      const res = await getAllBins();
+      const res = await getAllBins(role, userId);
       setWasteData(res);
     }
     getBins();
@@ -134,6 +148,7 @@ export default function DashboardPage({ role }: { role: string }) {
 
   const [selectedBin, setSelectedBin] = useState<{
     id: String;
+    binOwner: string;
     reportDate: string;
     reportTime: string;
     fillLevel: number;
@@ -144,10 +159,28 @@ export default function DashboardPage({ role }: { role: string }) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [binOwners, setBinOwners] = useState<
+    { name: string; id: string }[] | null
+  >([]);
+
+  useEffect(() => {
+    async function getBinOwners() {
+      const data = await getAllBinOwners();
+      console.log(data);
+
+      if (data.success && data.binOwners) {
+        setBinOwners(data.binOwners);
+      } else {
+        toast.error("Failed fetching the binOwenrs");
+      }
+    }
+    getBinOwners();
+  }, []);
 
   const addBinForm = useForm({
     resolver: zodResolver(binFormSchema),
     defaultValues: {
+      binOwner: "",
       sensorId: "",
       site: "",
       category: "",
@@ -161,6 +194,7 @@ export default function DashboardPage({ role }: { role: string }) {
   const updateBinForm = useForm({
     resolver: zodResolver(binFormSchema),
     defaultValues: {
+      binOwner: "",
       sensorId: "",
       site: "",
       category: "",
@@ -197,6 +231,7 @@ export default function DashboardPage({ role }: { role: string }) {
   }
 
   async function onAddBinSubmit(values: {
+    binOwner: string;
     reportDate: string;
     reportTime: string;
     fillLevel: number;
@@ -221,6 +256,7 @@ export default function DashboardPage({ role }: { role: string }) {
 
   // Handle update bin submission
   async function onUpdateBinSubmit(values: {
+    binOwner: string;
     reportDate: string;
     reportTime: string;
     fillLevel: number;
@@ -283,12 +319,15 @@ export default function DashboardPage({ role }: { role: string }) {
   }
 
   function handleUpdateClick(bin: any) {
-    setSelectedBin(bin);
+    console.log("bin", bin);
+
+    setSelectedBin({ ...bin });
 
     // Parse the date and time from the lastReported string
     const { date, time } = parseDateTimeString(bin.lastReported);
 
     updateBinForm.reset({
+      binOwner: bin.binOwnerId,
       sensorId: bin.sensor,
       site: bin.site,
       category: bin.category,
@@ -308,7 +347,6 @@ export default function DashboardPage({ role }: { role: string }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-
       {/* Main Content */}
       <main className="flex-1 p-4">
         {/* Breadcrumb */}
@@ -323,7 +361,7 @@ export default function DashboardPage({ role }: { role: string }) {
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbLink>Vadodara</BreadcrumbLink>
+              <BreadcrumbLink>{accountName}</BreadcrumbLink>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
@@ -377,6 +415,35 @@ export default function DashboardPage({ role }: { role: string }) {
                       >
                         <FormField
                           control={addBinForm.control}
+                          name="binOwner"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Bin Owner</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl className="w-full">
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select a BinOwner" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {binOwners?.map((item) => {
+                                    return (
+                                      <SelectItem value={item.id} key={item.id}>
+                                        {item.name}
+                                      </SelectItem>
+                                    );
+                                  })}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        ></FormField>
+                        <FormField
+                          control={addBinForm.control}
                           name="sensorId"
                           render={({ field }) => (
                             <FormItem>
@@ -411,7 +478,7 @@ export default function DashboardPage({ role }: { role: string }) {
                                 onValueChange={field.onChange}
                                 defaultValue={field.value}
                               >
-                                <FormControl>
+                                <FormControl className="w-full">
                                   <SelectTrigger>
                                     <SelectValue placeholder="Select a category" />
                                   </SelectTrigger>
@@ -538,6 +605,11 @@ export default function DashboardPage({ role }: { role: string }) {
                   Last Reported <ChevronDown className="h-4 w-4 inline-block" />
                 </TableHead>
                 {role == "ADMIN" && (
+                  <TableHead className="h-4 w-4 inline-block">
+                    Bin Owner
+                  </TableHead>
+                )}
+                {role == "ADMIN" && (
                   <TableHead className="text-right">Actions</TableHead>
                 )}
               </TableRow>
@@ -564,6 +636,10 @@ export default function DashboardPage({ role }: { role: string }) {
                   <TableCell className="text-green-500">
                     {item.lastReported}
                   </TableCell>
+                  {role == "ADMIN" && (
+                    <TableCell>{item?.binOwner?.name}</TableCell>
+                  )}
+
                   {role == "ADMIN" && (
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -612,6 +688,38 @@ export default function DashboardPage({ role }: { role: string }) {
               >
                 <FormField
                   control={updateBinForm.control}
+                  name="binOwner"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bin Owner</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl className="w-full">
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder="Select a BinOwner"
+                              defaultValue={selectedBin?.binOwner}
+                            />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {binOwners?.map((item) => {
+                            return (
+                              <SelectItem value={item.id} key={item.id}>
+                                {item.name}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                ></FormField>
+                <FormField
+                  control={updateBinForm.control}
                   name="sensorId"
                   render={({ field }) => (
                     <FormItem>
@@ -646,7 +754,7 @@ export default function DashboardPage({ role }: { role: string }) {
                         onValueChange={field.onChange}
                         defaultValue={field.value}
                       >
-                        <FormControl>
+                        <FormControl className="w-full">
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -771,7 +879,7 @@ export default function DashboardPage({ role }: { role: string }) {
 }
 
 function getFillLevelColor(level: number): string {
-  if (level > 35) return "bg-green-500";
+  if (level > 50) return "bg-red-500";
   if (level > 25) return "bg-yellow-500";
-  return "bg-red-500";
+  return "bg-green-500";
 }

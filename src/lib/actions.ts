@@ -1,10 +1,10 @@
 "use server";
+
 import { prisma } from "@/lib/prisma";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { cookies } from "next/headers";
 import { format, parse } from "date-fns";
-import { Sen } from "next/font/google";
 import { redirect } from "next/navigation";
 
 export async function loginAction(values: { email: string; password: string }) {
@@ -41,7 +41,7 @@ export async function loginAction(values: { email: string; password: string }) {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
-        maxAge: 3600, // 1 hour
+        maxAge: 7200, // 1 hour
         path: "/",
       });
 
@@ -105,23 +105,41 @@ export async function logoutAction() {
   (await cookies()).delete("token");
   redirect("/login");
 }
-export async function getAllBins() {
-  const bins = await prisma.bin.findMany();
-  console.log(bins);
 
+export async function getAllBins(role: string, userId: string) {
+  var bins;
+  if (role == "ADMIN") {
+    bins = await prisma.bin.findMany({
+      orderBy: {
+        fillLevel: "desc",
+      },
+      include: {
+        binOwner: true,
+      },
+    });
+  } else {
+    bins = await prisma.bin.findMany({
+      where: {
+        binOwnerId: userId,
+      },
+      include: {
+        binOwner: {
+          select: {
+            name: true,
+            id: true,
+          },
+        },
+      },
+      orderBy: {
+        fillLevel: "desc",
+      },
+    });
+  }
   return bins;
 }
 
-function formatDateTime(date: string, time: string) {
-  const [hours, minutes] = time.split(":");
-  const dateObj = new Date(date);
-  dateObj.setHours(Number.parseInt(hours, 10));
-  dateObj.setMinutes(Number.parseInt(minutes, 10));
-
-  return format(dateObj, "EEE dd/MM/yyyy HH:mm:ss");
-}
-
 export async function addBinAction(values: {
+  binOwner: string;
   reportDate: string;
   reportTime: string;
   fillLevel: number;
@@ -136,6 +154,7 @@ export async function addBinAction(values: {
       category: values.category,
       sensor: values.sensorId,
       site: values.site,
+      binOwnerId: values.binOwner,
     },
   });
   if (res) {
@@ -152,6 +171,7 @@ export async function addBinAction(values: {
 }
 
 export async function binUpdateAction(values: {
+  binOwner: string;
   lastReported: String;
   fillLevel: number;
   category: string;
@@ -164,11 +184,19 @@ export async function binUpdateAction(values: {
       id: String(values.id),
     },
     data: {
+      binOwnerId: values.binOwner,
       category: values.category,
       fillLevel: values.fillLevel,
       site: values.site,
       lastReported: String(values.lastReported),
       sensor: values.sensorId,
+    },
+  });
+
+  await prisma.activity.create({
+    data: {
+      binId: String(values.id),
+      fillLevel: values.fillLevel,
     },
   });
 
@@ -185,6 +213,11 @@ export async function binUpdateAction(values: {
 }
 
 export async function deleteBinAction(id: String) {
+  await prisma.activity.deleteMany({
+    where: {
+      binId: String(id),
+    },
+  });
   const bin = await prisma.bin.delete({
     where: {
       id: String(id),
@@ -199,4 +232,36 @@ export async function deleteBinAction(id: String) {
       success: false,
     };
   }
+}
+
+export async function getAllBinOwners() {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+    console.log(users, "users");
+
+    return {
+      success: true,
+      binOwners: users,
+    };
+  } catch (error) {
+    console.log(error);
+    return {
+      success: false,
+      binOwners: null,
+    };
+  }
+}
+
+function formatDateTime(date: string, time: string) {
+  const [hours, minutes] = time.split(":");
+  const dateObj = new Date(date);
+  dateObj.setHours(Number.parseInt(hours, 10));
+  dateObj.setMinutes(Number.parseInt(minutes, 10));
+
+  return format(dateObj, "EEE dd/MM/yyyy HH:mm:ss");
 }
