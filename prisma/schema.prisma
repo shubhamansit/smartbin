@@ -22,7 +22,7 @@ model User {
   bins      Bin[]
   role      Role     @default(USER)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  // updatedAt DateTime @updatedAt @db.Timestamptz(3)
 }
 
 enum Role {
@@ -41,7 +41,7 @@ model Bin {
   binOwner     User?      @relation(fields: [binOwnerId], references: [id])
   activity     Activity[]
   createdAt    DateTime   @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime   @updatedAt @db.Timestamptz(3)
+  // updatedAt    DateTime   @updatedAt @db.Timestamptz(3)
 }
 
 model Activity {
